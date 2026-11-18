@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "values": [
+    {"name": "minutes per day", "group": "calendar", "value": 480, "unit": "min", "source": "function 0x1401ee6a8"},
+    {"name": "minutes per week", "group": "calendar", "value": 2400, "unit": "min", "source": "function 0x1401ee6a8"},
+    {"name": "days per month", "group": "calendar", "value": 20, "unit": "days", "source": "function 0x1401ee6a8"},
+    {"name": "default duration unit", "group": "calendar", "value": "days (code 7)", "source": "function 0x1401ee6a8"},
+    {"name": "days per week", "group": "calendar", "value": 7, "source": "function 0x140202804 (CDR_DAYS_PER_WEEK)"},
+    {"name": "standard calendar working days", "group": "calendar", "value": "Mon-Fri (0111110)", "source": "PJINTL.DLL resource offset 0x35c440"},
+    {"name": "standard calendar hours", "group": "calendar", "value": "08:00-12:00,13:00-17:00", "source": "PJINTL.DLL resource offset 0x35c440"},
+    {"name": "24 hours calendar", "group": "calendar", "value": "00:00-24:00 every day", "source": "PJINTL.DLL resource string table"},
+    {"name": "night shift calendar", "group": "calendar", "value": "Mon 23-24; Tue-Fri 0-3,4-8,23-24; Sat 0-3,4-8", "source": "PJINTL.DLL resource string table"},
+    {"name": "default start time", "group": "calendar", "value": "08:00", "estimated": true},
+    {"name": "default finish time", "group": "calendar", "value": "17:00", "estimated": true},
+    {"name": "link types", "group": "scheduling", "value": "FS,SS,FF,SF", "source": "PJINTL.DLL resource offset 0x4057e0"},
+    {"name": "constraint types", "group": "scheduling", "value": "ASAP,ALAP,MSO,MFO,SNET,SNLT,FNET,FNLT", "source": "PJINTL.DLL resource string table"},
+    {"name": "task types", "group": "scheduling", "value": "Fixed Units,Fixed Duration,Fixed Work", "source": "PJINTL.DLL resource string table"},
+    {"name": "resource types", "group": "resources", "value": "Work,Material,Cost", "source": "PJINTL.DLL resource string table"},
+    {"name": "honor constraints over links", "group": "scheduling", "value": true, "source": "HonorConstraints property, table 0x1415d6140"},
+    {"name": "critical slack threshold", "group": "scheduling", "value": 0, "unit": "days", "estimated": true},
+    {"name": "default priority", "group": "scheduling", "value": 500, "estimated": true},
+    {"name": "new tasks effort driven", "group": "scheduling", "value": false, "estimated": true},
+    {"name": "baselines", "group": "tracking", "value": 11, "unit": "slots (Baseline, Baseline1-10)", "source": "field table functions 0x1401ba830 / 0x1401bd990"},
+    {"name": "leveling rule", "group": "resources", "value": "delay lower-priority later task", "estimated": true}
+  ]
+}

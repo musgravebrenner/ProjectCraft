@@ -1,0 +1,21 @@
+[
+  {"cmd": "project.set.title", "params": {"value": "Feature Test"}},
+  {"cmd": "project.set.manager", "params": {"value": "Riley Quinn"}},
+  {"cmd": "resource.add", "params": {"name": "Writer", "stdRate": 40, "maxUnits": 150}},
+  {"cmd": "resource.add", "params": {"name": "Paper", "type": "Material", "stdRate": 3, "materialLabel": "reams"}},
+  {"cmd": "task.insert", "params": {"name": "Alpha", "duration": "7d"}},
+  {"cmd": "task.insert", "params": {"name": "Bravo", "duration": "3d", "after": true, "predecessors": "1"}},
+  {"cmd": "task.insert", "params": {"name": "Charlie", "duration": "2w", "after": true, "predecessors": "2FF-2d"}},
+  {"cmd": "task.insert", "params": {"name": "Delta", "duration": "0d", "after": true, "predecessors": "3SF"}},
+  {"cmd": "task.insert", "params": {"name": "Echo", "duration": "4h", "after": true, "resources": "Writer[150%],Paper[7 reams]"}},
+  {"cmd": "task.insert", "params": {"name": "Foxtrot", "duration": "2d", "after": true}},
+  {"cmd": "task.set.priority", "params": {"ids": [1], "value": 700}},
+  {"cmd": "task.set.constraintType", "params": {"ids": [1], "value": "SNET"}},
+  {"cmd": "task.set.constraintDate", "params": {"ids": [1], "value": "2026-11-20"}},
+  {"cmd": "task.set.mode", "params": {"ids": [2], "value": "manual"}},
+  {"cmd": "task.set.deadline", "params": {"ids": [4], "value": "2026-12-15"}},
+  {"cmd": "task.set.percentComplete", "params": {"ids": [5], "value": 40}},
+  {"cmd": "task.set.fixedCost", "params": {"ids": [5], "value": 1234.5}},
+  {"cmd": "task.set.notes", "params": {"ids": [5], "value": "Echo note text"}},
+  {"cmd": "task.set.active", "params": {"ids": [6], "value": false}}
+]

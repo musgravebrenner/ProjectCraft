@@ -1,0 +1,13 @@
+# Build output
+/target/
+
+# Screenshots taken while building (some show private plans)
+/shots/
+
+# Machine-specific linker setup (points at this computer's Visual Studio install)
+/.cargo/config.toml
+
+# Test files the installed scheduling program wrote; regenerate with mpptest/convert.ps1
+/mpptest/*.mpp
+/mpptest/*.ref.xml
+/mpptest/*-from-mpp.plan.json

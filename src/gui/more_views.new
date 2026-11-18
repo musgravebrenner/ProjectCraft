@@ -1,0 +1,179 @@
+//! Task Form, Resource Form, Resource Graph and Team Planner.
+
+use super::gantt::{chart_x, for_buckets, timescale, HEADER_H};
+use super::{rgb, theme, App};
+use crate::fields;
+use crate::model::*;
+use crate::schedule;
+use egui::{pos2, vec2, Align2, Color32, FontId, Id, Rect, RichText, Sense, Stroke, StrokeKind, Ui};
+use serde_json::{json, Value};
+
+/// Previous / Next buttons that walk through tasks (or resources) in ID order.
+fn nav_bar(app: &mut App, ui: &mut Ui, resources: bool) {
+    let (prev, next) = ui.horizontal(|ui| (ui.button("Previous").clicked(), ui.button("Next").clicked())).inner;
+    if !(prev || next) {
+        return;
+    }
+    let step: i64 = if next { 1 } else { -1 };
+    if resources {
+        let n = app.s.project.resources.len() as i64;
+        if n == 0 {
+            return;
+        }
+        let cur = app.s.view.selected_resources.iter().next().and_then(|u| app.s.project.resource_index(*u)).map(|i| i as i64).unwrap_or(-1);
+        let k = (cur + step).clamp(0, n - 1) as usize;
+        app.run("resource.select", json!({"resource": k + 1}));
+    } else {
+        let n = app.s.project.tasks.len() as i64;
+        if n == 0 {
+            return;
+        }
+        let cur = app.s.current_task().map(|i| i as i64).unwrap_or(-1);
+        let k = (cur + step).clamp(0, n - 1) as usize;
+        app.run("edit.select", json!({"ids": [k + 1]}));
+    }
+}
+
+pub fn task_form_view(app: &mut App, ui: &mut Ui) {
+    ui.add_space(6.0);
+    nav_bar(app, ui, false);
+    ui.separator();
+    if app.s.current_task().is_none() && !app.s.project.tasks.is_empty() {
+        let uid = app.s.project.tasks[0].uid;
+        app.s.view.selected.insert(uid);
+    }
+    egui::ScrollArea::vertical().id_salt("taskform").show(ui, |ui| super::views::details_pane(app, ui));
+}
+
+fn current_resource(app: &mut App) -> Option<usize> {
+    let cur = app.s.view.selected_resources.iter().next().and_then(|u| app.s.project.resource_index(*u));
+    if cur.is_none() && !app.s.project.resources.is_empty() {
+        let uid = app.s.project.resources[0].uid;
+        app.s.view.selected_resources.insert(uid);
+        return Some(0);
+    }
+    cur
+}
+
+pub fn resource_form_view(app: &mut App, ui: &mut Ui) {
+    let th = theme(app.s.view.dark);
+    ui.add_space(6.0);
+    nav_bar(app, ui, true);
+    ui.separator();
+    let Some(ri) = current_resource(app) else {
+        ui.label(RichText::new("There are no resources yet. Add one on the Resource tab.").color(th.dim));
+        return;
+    };
+    let id = ri + 1;
+    let mut edit = false;
+    {
+        let pr = &app.s.project;
+        let r = &pr.resources[ri];
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(format!("{}  {}", id, r.name)).strong().size(16.0));
+            ui.label(RichText::new(r.kind.title()).color(th.dim));
+            edit = ui.button("Edit...").clicked();
+        });
+        egui::Grid::new("resform").num_columns(4).spacing([24.0, 6.0]).show(ui, |ui| {
+            for pair in [["initials", "maxUnits"], ["group", "stdRate"], ["code", "ovtRate"], ["calendar", "costPerUse"], ["email", "work"]] {
+                for f in pair {
+                    let title = fields::resource_field(f).map(|d| d.title).unwrap_or(f);
+                    ui.label(RichText::new(format!("{title}:")).color(th.dim));
+                    ui.label(fields::resource_text(pr, ri, f));
+                }
+                ui.end_row();
+            }
+        });
+        ui.separator();
+        ui.label(RichText::new("Assignments").strong());
+        egui::Grid::new("resform_asg").striped(true).spacing([20.0, 4.0]).show(ui, |ui| {
+            for h in ["ID", "Task Name", "Units", "Work", "Start", "Finish", "Cost"] {
+                ui.label(RichText::new(h).strong());
+            }
+            ui.end_row();
+            for a in pr.assignments_of_resource(r.uid) {
+                let Some(ti) = pr.task_index(a.task) else { continue };
+                let t = &pr.tasks[ti];
+                ui.label((ti + 1).to_string());
+                ui.label(&t.name);
+                ui.label(match r.kind {
+                    ResourceKind::Work => format!("{}%", fmt_num(a.units * 100.0)),
+                    ResourceKind::Material => format!("{} {}", fmt_num(a.units), r.material_label),
+                    ResourceKind::Cost => pr.fmt_cost(a.cost_amount),
+                });
+                ui.label(if r.kind == ResourceKind::Work { pr.fmt_work(a.work) } else { String::new() });
+                ui.label(fmt_date(t.start));
+                ui.label(fmt_date(t.finish));
+                ui.label(pr.fmt_cost(a.cost));
+                ui.end_row();
+            }
+        });
+    }
+    if edit {
+        app.run("resource.information", json!({"resource": id}));
+    }
+}
+
+/// Average units a resource works in [a, b): assigned work divided by available working time.
+fn load_in(pr: &Project, r: &Resource, a: chrono::NaiveDateTime, b: chrono::NaiveDateTime) -> Option<f64> {
+    let cal = r.calendar.as_deref().and_then(|c| pr.calendar_named(c)).unwrap_or(pr.cal());
+    let avail = cal.work_between(a, b);
+    if avail <= 0 {
+        return None;
+    }
+    let w: i64 = pr.assignments_of_resource(r.uid).map(|asg| schedule::assignment_work_in(pr, asg, a, b)).sum();
+    Some(w as f64 / avail as f64)
+}
+
+pub fn resource_graph_view(app: &mut App, ui: &mut Ui) {
+    let th = theme(app.s.view.dark);
+    let full = ui.available_rect_before_wrap();
+    ui.allocate_rect(full, Sense::hover());
+    let side_w = 220.0;
+    let chart_left = full.left() + side_w;
+    let hdr = Rect::from_min_max(pos2(chart_left, full.top()), pos2(full.right(), full.top() + HEADER_H));
+    timescale(app, ui, hdr, &th);
+    let resp = ui.interact(hdr, Id::new("rg_hdr"), Sense::drag());
+    if resp.dragged() {
+        app.left_days -= resp.drag_delta().x as f64 / app.s.view.px_per_day as f64;
+    }
+    let side = Rect::from_min_max(full.min, pos2(chart_left - 4.0, full.bottom()));
+    ui.painter().rect_filled(side, 0.0, th.panel);
+    let ri = current_resource(app);
+    let mut pick: Option<usize> = None;
+    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(side.shrink(6.0)), |ui| {
+        ui.label(RichText::new("Resource").strong());
+        egui::ScrollArea::vertical().id_salt("rg_list").max_height(side.height() * 0.6).show(ui, |ui| {
+            for (i, r) in app.s.project.resources.iter().enumerate() {
+                if r.kind != ResourceKind::Work {
+                    continue;
+                }
+                let txt = if r.overallocated { RichText::new(&r.name).color(th.danger) } else { RichText::new(&r.name) };
+                if ui.selectable_label(Some(i) == ri, txt).clicked() {
+                    pick = Some(i + 1);
+                }
+            }
+        });
+        ui.separator();
+        for (label, col) in [("Allocated", Color32::from_rgb(70, 120, 190)), ("Overallocated", th.danger)] {
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+                ui.painter().rect_filled(r, 1.0, col);
+                ui.label(label);
+            });
+        }
+        ui.horizontal(|ui| {
+            let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+            ui.painter().line_segment([r.left_center(), r.right_center()], Stroke::new(2.0_f32, th.text));
+            ui.label("Max. units");
+        });
+    });
+    if let Some(id) = pick {
+        app.run("resource.select", json!({"resource": id}));
+    }
+    let Some(ri) = current_resource(app) else { return };
+    let pr = &app.s.project;
+    let r = pr.resources[ri].clone();
+    let body = Rect::from_min_max(pos2(chart_left, full.top() + HEADER_H), pos2(full.right(), full.bottom() - 4.0));
+    let p = ui.painter().with_clip_rect(body);
+    p.rect_filled(body, 0.0, th.bg);

@@ -1,0 +1,121 @@
+    let dx = ui.input(|i| if i.pointer.hover_pos().map(|p| body.contains(p)).unwrap_or(false) { i.smooth_scroll_delta.x } else { 0.0 });
+    if dx != 0.0 {
+        app.left_days -= dx as f64 / app.s.view.px_per_day as f64;
+    }
+}
+
+type Lane = (String, Option<u32>, Vec<usize>);
+
+pub fn team_planner_view(app: &mut App, ui: &mut Ui) {
+    let th = theme(app.s.view.dark);
+    let full = ui.available_rect_before_wrap();
+    ui.allocate_rect(full, Sense::hover());
+    let side_w = 200.0;
+    let chart_left = full.left() + side_w;
+    let hdr = Rect::from_min_max(pos2(chart_left, full.top()), pos2(full.right(), full.top() + HEADER_H));
+    timescale(app, ui, hdr, &th);
+    let hresp = ui.interact(hdr, Id::new("tp_hdr"), Sense::drag());
+    if hresp.dragged() {
+        app.left_days -= hresp.drag_delta().x as f64 / app.s.view.px_per_day as f64;
+    }
+    {
+        let hl = Rect::from_min_max(full.min, pos2(chart_left, full.top() + HEADER_H));
+        ui.painter().rect_filled(hl, 0.0, th.header);
+        ui.painter().text(pos2(hl.left() + 8.0, hl.bottom() - 12.0), Align2::LEFT_CENTER, "Resource Name", FontId::proportional(app.s.view.font_size - 0.5), th.text);
+    }
+    let pr = &app.s.project;
+    let mut lanes: Vec<Lane> = vec![];
+    for r in pr.resources.iter().filter(|r| r.kind == ResourceKind::Work) {
+        let tasks: Vec<usize> = pr.assignments_of_resource(r.uid).filter_map(|a| pr.task_index(a.task)).filter(|&i| !pr.tasks[i].summary && pr.tasks[i].active).collect();
+        lanes.push((r.name.clone(), Some(r.uid), tasks));
+    }
+    let unassigned: Vec<usize> = (0..pr.tasks.len())
+        .filter(|&i| {
+            let t = &pr.tasks[i];
+            !t.summary && t.active && !t.is_milestone() && !pr.assignments_of_task(t.uid).any(|a| pr.resource_by_uid(a.resource).map(|r| r.kind == ResourceKind::Work).unwrap_or(false))
+        })
+        .collect();
+    lanes.push(("Unassigned Tasks".to_string(), None, unassigned));
+    let row_h = app.s.view.row_height;
+    let bar_h = row_h - 4.0;
+    let fs = app.s.view.font_size;
+    let body = Rect::from_min_max(pos2(full.left(), full.top() + HEADER_H), full.max);
+    let mut runs: Vec<(String, Value)> = vec![];
+    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(body), |ui| {
+        egui::ScrollArea::vertical().id_salt("teamplanner").auto_shrink([false, false]).show(ui, |ui| {
+            let left = ui.cursor().left();
+            let clip = ui.clip_rect();
+            let cclip = Rect::from_min_max(pos2(chart_left, clip.top()), clip.max);
+            for (name, ruid, tasks) in &lanes {
+                // stack overlapping tasks into sub-rows
+                let mut sub_ends: Vec<chrono::NaiveDateTime> = vec![];
+                let mut placed: Vec<(usize, usize)> = vec![];
+                let mut sorted = tasks.clone();
+                sorted.sort_by_key(|&i| (pr.tasks[i].start, i));
+                for i in sorted {
+                    let t = &pr.tasks[i];
+                    let k = match sub_ends.iter().position(|e| *e <= t.start) {
+                        Some(k) => k,
+                        None => {
+                            sub_ends.push(t.start);
+                            sub_ends.len() - 1
+                        }
+                    };
+                    sub_ends[k] = t.finish;
+                    placed.push((i, k));
+                }
+                let h = sub_ends.len().max(1) as f32 * row_h + 8.0;
+                let (lane, _) = ui.allocate_exact_size(vec2(full.width(), h), Sense::hover());
+                let lane = Rect::from_min_size(pos2(left, lane.top()), lane.size());
+                let over = ruid.and_then(|u| pr.resource_by_uid(u)).map(|r| r.overallocated).unwrap_or(false);
+                let p = ui.painter();
+                p.rect_filled(Rect::from_min_max(lane.min, pos2(chart_left, lane.bottom())), 0.0, if ruid.is_none() { th.panel } else { th.header });
+                p.line_segment([lane.left_bottom(), lane.right_bottom()], Stroke::new(1.0_f32, th.grid));
+                let cy = lane.top() + 4.0 + row_h / 2.0;
+                if ruid.is_some() {
+                    p.circle_filled(pos2(lane.left() + 16.0, cy), 9.0, Color32::from_rgb(70, 120, 190));
+                    let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+                    p.text(pos2(lane.left() + 16.0, cy), Align2::CENTER_CENTER, initial, FontId::proportional(10.0), Color32::WHITE);
+                }
+                p.text(pos2(lane.left() + 32.0, cy), Align2::LEFT_CENTER, name, FontId::proportional(fs), if over { th.danger } else { th.text });
+                let cp = ui.painter().with_clip_rect(cclip);
+                for (i, k) in placed {
+                    let t = &pr.tasks[i];
+                    let x0 = chart_x(app, chart_left, t.start);
+                    let x1 = chart_x(app, chart_left, t.finish).max(x0 + 4.0);
+                    let top = lane.top() + 4.0 + k as f32 * row_h + 2.0;
+                    let r = Rect::from_min_max(pos2(x0, top), pos2(x1, top + bar_h));
+                    let col = if t.percent_complete >= 100.0 {
+                        Color32::from_rgb(160, 160, 160)
+                    } else if t.critical && app.s.view.show_critical {
+                        rgb(app.s.view.bar_colors.critical)
+                    } else if ruid.is_none() {
+                        Color32::from_rgb(240, 196, 110)
+                    } else {
+                        rgb(app.s.view.bar_colors.task)
+                    };
+                    cp.rect_filled(r, 3.0, col);
+                    let sel = app.s.view.selected.contains(&t.uid);
+                    cp.rect_stroke(r, 3.0, Stroke::new(if sel { 2.0_f32 } else { 0.8 }, if sel { th.accent } else { col.gamma_multiply(0.6) }), StrokeKind::Inside);
+                    cp.with_clip_rect(r.intersect(cclip)).text(r.left_center() + vec2(5.0, 0.0), Align2::LEFT_CENTER, &t.name, FontId::proportional(fs - 1.5), Color32::from_rgb(20, 30, 50));
+                    let resp = ui
+                        .interact(r.intersect(cclip), Id::new(("tpbar", t.uid, name.as_str())), Sense::click())
+                        .on_hover_text(format!("{}\n{} - {}\n{}", t.name, fmt_date(t.start), fmt_date(t.finish), t.duration.format(&pr.settings)));
+                    if resp.clicked() {
+                        runs.push(("edit.select".into(), json!({"ids": [i + 1]})));
+                    }
+                    if resp.double_clicked() {
+                        runs.push(("task.information".into(), json!({"id": i + 1})));
+                    }
+                }
+            }
+        });
+    });
+    let dx = ui.input(|i| if i.pointer.hover_pos().map(|p| p.x > chart_left && body.contains(p)).unwrap_or(false) { i.smooth_scroll_delta.x } else { 0.0 });
+    if dx != 0.0 {
+        app.left_days -= dx as f64 / app.s.view.px_per_day as f64;
+    }
+    for (c, p) in runs {
+        app.run(&c, p);
+    }
+}
