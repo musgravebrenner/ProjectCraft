@@ -14,11 +14,16 @@
 </p>
 
 <p align="center">
+  <a href="#download"><b>Download</b></a> ·
   <a href="#features">Features</a> ·
   <a href="#opening-microsoft-project-files">Opening .mpp files</a> ·
   <a href="#build-and-run">Build and run</a> ·
   <a href="#getting-started">Get started</a> ·
   <a href="#drive-it-from-scripts-and-ai-agents">Scripts and AI agents</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/musgravebrenner/ProjectCraft/releases/latest"><b>⬇ Download PlanCraft for Windows</b></a>
 </p>
 
 <br>
@@ -47,6 +52,17 @@
 </table>
 
 <br>
+
+## Download
+
+PlanCraft is free. Get the latest version from the **[Releases page](https://github.com/musgravebrenner/ProjectCraft/releases/latest)**: under **Assets**, download `PlanCraft-<version>-windows-x64.zip`. It runs on Windows 10 or 11, 64-bit.
+
+1. Right-click the zip in your Downloads folder, choose **Extract All…**, and pick where to keep PlanCraft.
+2. Open the extracted folder and double-click **plancraft.exe**.
+
+There's nothing to install. **The first time you open it**, Windows may show a blue box saying *"Windows protected your PC"*. This is SmartScreen warning about an app it hasn't seen often. Click **More info**, then **Run anyway**.
+
+The folder also contains `plancraft-cli.exe`, the command line and MCP server described [below](#drive-it-from-scripts-and-ai-agents). There are no macOS or Linux downloads yet; on those, [build it from source](#build-and-run).
 
 ## How this relates to PlanCraft
 
@@ -113,7 +129,7 @@ The reader was checked against Microsoft Project's own XML export of the same pl
 
 ## Build and run
 
-There are no ready-made downloads yet, so you build it from source. You need [Rust](https://rustup.rs). On Windows you also need the Visual Studio C++ build tools.
+To build it yourself instead of [downloading it](#download), you need [Rust](https://rustup.rs). On Windows you also need the Visual Studio C++ build tools.
 
 ```bash
 git clone https://github.com/musgravebrenner/ProjectCraft.git
